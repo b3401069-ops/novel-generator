@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小說工坊 Novel Forge</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --bg: #0f172a;
+            --bg-card: #1e293b;
+            --bg-input: #334155;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #475569;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 15px 0;
+            margin-bottom: 30px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo h1 {
+            font-size: 24px;
+            background: linear-gradient(135deg, var(--primary), #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo span {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        /* Navigation */
+        nav {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-btn {
+            padding: 8px 16px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .nav-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        /* Main Layout */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 20px;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .sidebar h3 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: var(--text-muted);
+        }
+
+        .novel-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .novel-item {
+            padding: 12px;
+            background: var(--bg-input);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .novel-item:hover {
+            background: var(--primary);
+        }
+
+        .novel-item.active {
+            background: var(--primary);
+            border: 1px solid var(--primary);
+        }
+
+        .novel-item h4 {
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .novel-item p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Content Area */
+        .content-area {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 30px;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: var(--bg-input);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        /* Style Grid */
+        .style-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .style-card {
+            padding: 15px;
+            background: var(--bg-input);
+            border: 2px solid transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .style-card:hover {
+            border-color: var(--primary);
+        }
+
+        .style-card.selected {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.2);
+        }
+
+        .style-card .icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .style-card .name {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .style-card .desc {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Chapter View */
+        .chapter-view {
+            margin-top: 30px;
+        }
+
+        .chapter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .chapter-title {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .chapter-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .chapter-content {
+            line-height: 1.8;
+            font-size: 16px;
+            white-space: pre-wrap;
+        }
+
+        .chapter-content p {
+            margin-bottom: 1em;
+            text-indent: 2em;
+        }
+
+        /* Chapter List */
+        .chapter-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .chapter-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: var(--bg-input);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .chapter-item:hover {
+            background: var(--border);
+        }
+
+        .chapter-item.active {
+            background: var(--primary);
+        }
+
+        .chapter-item .number {
+            font-size: 14px;
+            color: var(--text-muted);
+            width: 40px;
+        }
+
+        .chapter-item .title {
+            flex: 1;
+            font-size: 14px;
+        }
+
+        .chapter-item .status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .status-generated {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--success);
+        }
+
+        .status-pending {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        /* Edit Panel */
+        .edit-panel {
+            margin-top: 20px;
+            padding: 20px;
+            background: var(--bg-input);
+            border-radius: 8px;
+        }
+
+        .edit-panel textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            color: var(--text-muted);
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: static;
+            }
+
+            .style-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-content">
+            <div class="logo">
+                <h1>📚 小說工坊</h1>
+                <span>Novel Forge</span>
+            </div>
+            <nav>
+                <button class="nav-btn active" onclick="showSection('create')">✨ 創建小說</button>
+                <button class="nav-btn" onclick="showSection('library')">📖 我的小說</button>
+                <button class="nav-btn" onclick="showSection('styles')">🎨 風格庫</button>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Create Section -->
+        <div id="section-create" class="content-area">
+            <h2>✨ 創建新小說</h2>
+            <p style="color: var(--text-muted); margin: 10px 0 20px;">
+                輸入簡略大綱，AI 幫你生成完整小說
+            </p>
+
+            <div class="form-group">
+                <label>📝 簡略大綱</label>
+                <textarea id="brief-outline" placeholder="描述你的故事想法...
+
+例如：
+一個關於時間旅行的科幻愛情故事。
+主角是一位年輕的物理學家，意外發明了時光機。
+他回到過去遇見了一位藝術家，兩人相愛。
+但每次改變過去都會影響未來..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>🎨 選擇風格</label>
+                <div class="style-grid" id="style-grid">
+                    <!-- 由JavaScript動態生成 -->
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label>📚 章節數量</label>
+                    <input type="number" id="chapter-count" value="10" min="1" max="50">
+                </div>
+                <div class="form-group">
+                    <label>📏 每章字數</label>
+                    <input type="number" id="words-per-chapter" value="3000" min="500" max="10000">
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="createNovel()">
+                    🚀 開始生成
+                </button>
+            </div>
+        </div>
+
+        <!-- Library Section -->
+        <div id="section-library" class="main-layout" style="display: none;">
+            <div class="sidebar">
+                <h3>📖 我的小說</h3>
+                <div class="novel-list" id="novel-list">
+                    <!-- 由JavaScript動態生成 -->
+                </div>
+            </div>
+
+            <div class="content-area" id="novel-detail">
+                <div style="text-align: center; color: var(--text-muted); padding: 50px;">
+                    選擇一部小說開始閱讀
+                </div>
+            </div>
+        </div>
+
+        <!-- Styles Section -->
+        <div id="section-styles" class="content-area" style="display: none;">
+            <h2>🎨 風格庫</h2>
+            <p style="color: var(--text-muted); margin: 10px 0 20px;">
+                16 種精心設計的寫作風格，滿足你的創作需求
+            </p>
+            <div class="style-grid" id="styles-detail-grid">
+                <!-- 由JavaScript動態生成 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let selectedStyle = 'modern';
+        let novels = [];
+        let currentNovel = null;
+        let currentChapter = null;
+
+        // API base URL
+        const API_BASE = '/api/v1';
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStyles();
+            loadNovels();
+        });
+
+        // Section navigation
+        function showSection(section) {
+            document.querySelectorAll('.content-area, .main-layout').forEach(el => {
+                el.style.display = 'none';
+            });
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            if (section === 'create') {
+                document.getElementById('section-create').style.display = 'block';
+                document.querySelectorAll('.nav-btn')[0].classList.add('active');
+            } else if (section === 'library') {
+                document.getElementById('section-library').style.display = 'grid';
+                document.querySelectorAll('.nav-btn')[1].classList.add('active');
+                loadNovels();
+            } else if (section === 'styles') {
+                document.getElementById('section-styles').style.display = 'block';
+                document.querySelectorAll('.nav-btn')[2].classList.add('active');
+                loadStylesDetail();
+            }
+        }
+
+        // Load styles
+        async function loadStyles() {
+            try {
+                const response = await fetch(`${API_BASE}/styles/`);
+                const styles = await response.json();
+                renderStyleGrid(styles, 'style-grid', true);
+            } catch (error) {
+                console.error('Failed to load styles:', error);
+            }
+        }
+
+        // Load styles detail
+        async function loadStylesDetail() {
+            try {
+                const response = await fetch(`${API_BASE}/styles/`);
+                const styles = await response.json();
+                renderStyleGrid(styles, 'styles-detail-grid', false);
+            } catch (error) {
+                console.error('Failed to load styles:', error);
+            }
+        }
+
+        // Render style grid
+        function renderStyleGrid(styles, containerId, selectable) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = styles.map(style => `
+                <div class="style-card ${selectable && style.id === selectedStyle ? 'selected' : ''}"
+                     onclick="${selectable ? `selectStyle('${style.id}')` : `showStyleDetail('${style.id}')`}">
+                    <div class="icon">${style.icon}</div>
+                    <div class="name">${style.name}</div>
+                    <div class="desc">${style.description.substring(0, 30)}...</div>
+                </div>
+            `).join('');
+        }
+
+        // Select style
+        function selectStyle(styleId) {
+            selectedStyle = styleId;
+            document.querySelectorAll('#style-grid .style-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+        }
+
+        // Show style detail
+        async function showStyleDetail(styleId) {
+            try {
+                const response = await fetch(`${API_BASE}/styles/${styleId}`);
+                const style = await response.json();
+                
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                    background: rgba(0,0,0,0.8); z-index: 1000;
+                    display: flex; align-items: center; justify-content: center;
+                    padding: 20px;
+                `;
+                modal.innerHTML = `
+                    <div style="background: var(--bg-card); border-radius: 12px; padding: 30px; max-width: 600px; max-height: 80vh; overflow-y: auto;">
+                        <h2>${style.icon} ${style.name}</h2>
+                        <p style="color: var(--text-muted); margin: 10px 0;">${style.description}</p>
+                        <h3 style="margin-top: 20px;">系統提示詞預覽</h3>
+                        <pre style="background: var(--bg-input); padding: 15px; border-radius: 8px; font-size: 12px; white-space: pre-wrap; margin-top: 10px;">${style.system_prompt.substring(0, 500)}...</pre>
+                        <button class="btn btn-secondary" onclick="this.closest('div').parentElement.remove()" style="margin-top: 20px;">關閉</button>
+                    </div>
+                `;
+                modal.onclick = (e) => {
+                    if (e.target === modal) modal.remove();
+                };
+                document.body.appendChild(modal);
+            } catch (error) {
+                console.error('Failed to load style detail:', error);
+            }
+        }
+
+        // Load novels
+        async function loadNovels() {
+            try {
+                const response = await fetch(`${API_BASE}/novels/`);
+                novels = await response.json();
+                renderNovelList();
+            } catch (error) {
+                console.error('Failed to load novels:', error);
+            }
+        }
+
+        // Render novel list
+        function renderNovelList() {
+            const container = document.getElementById('novel-list');
+            if (novels.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">還沒有小說，去創建一部吧！</p>';
+                return;
+            }
+            container.innerHTML = novels.map(novel => `
+                <div class="novel-item ${currentNovel?.id === novel.id ? 'active' : ''}"
+                     onclick="selectNovel('${novel.id}')">
+                    <h4>${novel.title}</h4>
+                    <p>${novel.chapter_count} 章 · ${novel.style}</p>
+                </div>
+            `).join('');
+        }
+
+        // Select novel
+        async function selectNovel(novelId) {
+            try {
+                const response = await fetch(`${API_BASE}/novels/${novelId}`);
+                currentNovel = await response.json();
+                renderNovelDetail();
+                renderNovelList();
+            } catch (error) {
+                console.error('Failed to load novel:', error);
+            }
+        }
+
+        // Render novel detail
+        function renderNovelDetail() {
+            const container = document.getElementById('novel-detail');
+            if (!currentNovel) {
+                container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 50px;">選擇一部小說開始閱讀</div>';
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="chapter-header">
+                    <div>
+                        <div class="chapter-title">${currentNovel.title}</div>
+                        <div class="chapter-meta">${currentNovel.summary}</div>
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteNovel('${currentNovel.id}')">刪除</button>
+                </div>
+
+                <h3>角色</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 20px;">
+                    ${currentNovel.characters.map(char => `
+                        <div style="padding: 8px 12px; background: var(--bg-input); border-radius: 6px;">
+                            <strong>${char.name}</strong> <span style="color: var(--text-muted);">(${char.role})</span>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <h3>章節</h3>
+                <div class="chapter-list">
+                    ${currentNovel.chapters.map(chap => `
+                        <div class="chapter-item ${currentChapter?.number === chap.number ? 'active' : ''}"
+                             onclick="viewChapter(${chap.number})">
+                            <span class="number">第${chap.number}章</span>
+                            <span class="title">${chap.title || '未命名'}</span>
+                            <span class="status ${chap.content ? 'status-generated' : 'status-pending'}">
+                                ${chap.content ? '已生成' : '待生成'}
+                            </span>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <div id="chapter-view" class="chapter-view" style="display: none;">
+                    <!-- 由JavaScript動態生成 -->
+                </div>
+            `;
+        }
+
+        // View chapter
+        async function viewChapter(chapterNumber) {
+            const chapter = currentNovel.chapters.find(c => c.number === chapterNumber);
+            if (!chapter) return;
+
+            currentChapter = chapter;
+            renderNovelDetail();
+
+            const viewContainer = document.getElementById('chapter-view');
+            viewContainer.style.display = 'block';
+
+            if (!chapter.content) {
+                viewContainer.innerHTML = `
+                    <div class="chapter-header">
+                        <div class="chapter-title">第${chapter.number}章：${chapter.title || '未命名'}</div>
+                    </div>
+                    <p style="color: var(--text-muted);">${chapter.summary || '暫無摘要'}</p>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="generateChapter(${chapter.number})">
+                            ✨ 生成章節
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            viewContainer.innerHTML = `
+                <div class="chapter-header">
+                    <div>
+                        <div class="chapter-title">第${chapter.number}章：${chapter.title || '未命名'}</div>
+                        <div class="chapter-meta">版本 ${chapter.version} · ${chapter.content.length} 字</div>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" onclick="showEditPanel(${chapter.number})">
+                            ✏️ 編輯
+                        </button>
+                    </div>
+                </div>
+                <div class="chapter-content">${formatContent(chapter.content)}</div>
+                <div id="edit-panel-container"></div>
+            `;
+        }
+
+        // Format content
+        function formatContent(content) {
+            return content.split('\n').filter(p => p.trim()).map(p => 
+                `<p>${p}</p>`
+            ).join('');
+        }
+
+        // Show edit panel
+        function showEditPanel(chapterNumber) {
+            const container = document.getElementById('edit-panel-container');
+            container.innerHTML = `
+                <div class="edit-panel">
+                    <h3>✏️ 修改章節</h3>
+                    <p style="color: var(--text-muted); margin: 10px 0;">描述你想要的修改</p>
+                    <textarea id="edit-instruction" placeholder="例如：
+- 讓對話更生動
+- 加入更多場景描寫
+- 調整節奏，讓開頭更緊湊
+- 修改結尾，讓它更溫暖"></textarea>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="editChapter(${chapterNumber})">
+                            🔄 重新生成
+                        </button>
+                        <button class="btn btn-secondary" onclick="document.getElementById('edit-panel-container').innerHTML = ''">
+                            取消
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Create novel
+        async function createNovel() {
+            const briefOutline = document.getElementById('brief-outline').value.trim();
+            if (!briefOutline) {
+                showToast('請輸入簡略大綱');
+                return;
+            }
+
+            const chapterCount = parseInt(document.getElementById('chapter-count').value);
+            const wordsPerChapter = parseInt(document.getElementById('words-per-chapter').value);
+
+            showToast('正在生成小說大綱，請稍候...');
+
+            try {
+                const response = await fetch(`${API_BASE}/novels/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        brief_outline: briefOutline,
+                        style: selectedStyle,
+                        chapter_count: chapterCount,
+                        words_per_chapter: wordsPerChapter,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('生成失敗');
+                }
+
+                const novel = await response.json();
+                showToast('小說創建成功！');
+                
+                // 切換到圖書館
+                showSection('library');
+                await loadNovels();
+                selectNovel(novel.id);
+            } catch (error) {
+                showToast('生成失敗：' + error.message);
+            }
+        }
+
+        // Generate chapter
+        async function generateChapter(chapterNumber) {
+            if (!currentNovel) return;
+
+            showToast('正在生成章節，請稍候...');
+
+            try {
+                const response = await fetch(`${API_BASE}/chapters/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        novel_id: currentNovel.id,
+                        chapter_number: chapterNumber,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('生成失敗');
+                }
+
+                showToast('章節生成成功！');
+                await selectNovel(currentNovel.id);
+                viewChapter(chapterNumber);
+            } catch (error) {
+                showToast('生成失敗：' + error.message);
+            }
+        }
+
+        // Edit chapter
+        async function editChapter(chapterNumber) {
+            if (!currentNovel) return;
+
+            const instruction = document.getElementById('edit-instruction').value.trim();
+            if (!instruction) {
+                showToast('請輸入修改要求');
+                return;
+            }
+
+            showToast('正在修改章節，請稍候...');
+
+            try {
+                const response = await fetch(`${API_BASE}/chapters/edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        novel_id: currentNovel.id,
+                        chapter_number: chapterNumber,
+                        instruction: instruction,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('修改失敗');
+                }
+
+                showToast('章節修改成功！');
+                await selectNovel(currentNovel.id);
+                viewChapter(chapterNumber);
+            } catch (error) {
+                showToast('修改失敗：' + error.message);
+            }
+        }
+
+        // Delete novel
+        async function deleteNovel(novelId) {
+            if (!confirm('確定要刪除這部小說嗎？')) return;
+
+            try {
+                await fetch(`${API_BASE}/novels/${novelId}`, { method: 'DELETE' });
+                showToast('已刪除');
+                currentNovel = null;
+                await loadNovels();
+                renderNovelDetail();
+            } catch (error) {
+                showToast('刪除失敗');
+            }
+        }
+
+        // Toast notification
+        function showToast(message) {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+</html>
