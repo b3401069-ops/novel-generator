@@ -63,8 +63,8 @@ python main.py
 
 ### 4. 訪問
 
-- **Web介面**：http://localhost:9527
-- **API文檔**：http://localhost:9527/docs
+- **Web介面**：http://localhost:8012
+- **API文檔**：http://localhost:8012/docs
 
 ## 📖 使用方式
 
@@ -154,7 +154,14 @@ novel-generator/
 │   └── routes/
 │       ├── novels.py          # 小說API
 │       ├── chapters.py        # 章節API
-│       └── styles.py          # 風格API
+│       ├── styles.py          # 風格API
+│       └── export.py          # 匯出/匯入API
+├── scripts/
+│   ├── backup.py              # 備份工具
+│   ├── auto_backup.sh         # Linux/Mac自動備份
+│   ├── auto_backup.bat        # Windows自動備份
+│   ├── restore.sh             # 一鍵復原腳本
+│   └── README.md              # 備份使用說明
 ├── static/
 │   └── index.html             # Web前端
 └── data/                      # 資料目錄
@@ -177,6 +184,63 @@ novel-generator/
 
 ### 5. 隨時隨地
 Web介面設計，任何設備的瀏覽器都能訪問和編輯。
+
+## 🌐 遠端存取（Cloudflare Tunnel）
+
+使用 Cloudflare Tunnel 從任何地方訪問：
+
+```bash
+# 安裝 cloudflared
+# https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+
+# 登入
+cloudflared tunnel login
+
+# 建立 tunnel
+cloudflared tunnel create novel-generator
+
+# 配置 DNS
+cloudflared tunnel route dns novel-generator novel.mingneo.dev
+
+# 啟動 tunnel
+cloudflared tunnel run novel-generator
+```
+
+訪問地址：https://novel.mingneo.dev
+
+## 💾 備份系統
+
+### 自動備份
+
+```bash
+# Linux/Mac
+./scripts/auto_backup.sh
+
+# Windows
+scripts\auto_backup.bat
+```
+
+### 手動備份
+
+```bash
+python scripts/backup.py backup
+```
+
+### 還原備份
+
+```bash
+./scripts/restore.sh ~/Google\ Drive/novel-backups
+```
+
+### 匯出/匯入
+
+```bash
+# 匯出為 JSON
+curl -o novel.json http://localhost:8012/api/v1/export/{novel_id}/json
+
+# 匯入
+curl -X POST -F "file=@novel.json" http://localhost:8012/api/v1/export/import
+```
 
 ## 🤝 貢獻
 
