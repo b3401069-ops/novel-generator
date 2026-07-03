@@ -200,13 +200,13 @@ cloudflared tunnel login
 cloudflared tunnel create novel-generator
 
 # 配置 DNS
-cloudflared tunnel route dns novel-generator novel.mingneo.dev
+cloudflared tunnel route dns novel-generator inkwell.mingneo.dev
 
 # 啟動 tunnel
 cloudflared tunnel run novel-generator
 ```
 
-訪問地址：https://novel.mingneo.dev
+訪問地址：https://inkwell.mingneo.dev
 
 ## 💾 備份系統
 
