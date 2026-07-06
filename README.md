@@ -277,6 +277,39 @@ curl -o novel.json http://localhost:8012/api/v1/export/{novel_id}/json
 curl -X POST -F "file=@novel.json" http://localhost:8012/api/v1/export/import
 ```
 
+## 🚚 搬家 / 災難復原
+
+整套服務的可搬移狀態只有三樣東西，其他都在 GitHub（程式碼）或
+Cloudflare 雲端（Access、DNS、Tunnel 路由），換機器完全不用動：
+
+| 需要搬的 | 位置 | 內容 |
+|---|---|---|
+| 資料庫 | `data/novels.db` | 所有小說、章節、版本歷史、角色 |
+| 環境設定 | `.env` | LLM API key 等 |
+| Tunnel 憑證 | `~/.cloudflared/` | `cert.pem` + tunnel credentials JSON |
+
+### 一鍵搬家
+
+```bash
+# 舊機器：打包（服務跑著也可以，資料庫走 SQLite backup API 快照）
+python scripts/migrate_export.py pack
+# → 產生 novel-forge-migration_<時間>.zip
+
+# 新機器：
+git clone https://github.com/b3401069-ops/novel-generator.git
+cd novel-generator
+pip install -r requirements.txt
+python scripts/migrate_export.py unpack --file novel-forge-migration_XXX.zip
+python main.py
+cloudflared tunnel run novel-generator
+```
+
+Tunnel 是「機器主動連出 Cloudflare」，新機器跑起來後
+`inkwell.mingneo.dev` 自動指向新機器，DNS 與 Access 設定都不用改。
+
+> ⚠️ 搬家 zip 含有 API key 與 Tunnel 憑證，請用隨身碟或加密通道傳輸，
+> 搬完之後刪除。還原時既有檔案會先備份成 `*.pre_migrate_<時間>`，不會被直接蓋掉。
+
 ## 🤝 貢獻
 
 歡迎提交 Issue 和 Pull Request！
