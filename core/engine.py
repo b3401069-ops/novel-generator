@@ -142,7 +142,7 @@ class NovelEngine:
         
         # 解析回應
         content = response.choices[0].message.content
-        outline_data = json.loads(content)
+        outline_data = self._parse_json_response(content)
         
         # 創建小說對象
         novel = Novel(
@@ -413,6 +413,24 @@ class NovelEngine:
         )
         
         return response.choices[0].message.content
+
+    @staticmethod
+    def _parse_json_response(content: str) -> Dict[str, Any]:
+        """
+        解析 LLM 回傳的 JSON。
+
+        部分 OpenAI 相容 API（DeepSeek / Ollama / LM Studio 等）會忽略
+        response_format，回傳 ```json 圍欄或夾帶說明文字，這裡做容錯處理。
+        """
+        text = content.strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end > start:
+                return json.loads(text[start:end + 1])
+            raise ValueError(f"LLM 回應不是有效的 JSON，無法解析大綱：{text[:200]}")
 
     def _build_context(
         self,

@@ -30,7 +30,8 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "gpt-4o"
     llm_temperature: float = 0.8
-    llm_max_tokens: int = 4096
+    # 中文 3000 字約 4500+ tokens，4096 會截斷章節，故預設 8192
+    llm_max_tokens: int = 8192
 
     # 詩詞生成用（需要較高創意）
     poetry_temperature: float = 1.0

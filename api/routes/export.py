@@ -5,11 +5,11 @@ Export/Import API Routes
 
 import json
 from typing import Optional
-from pathlib import Path
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -18,6 +18,17 @@ from models.novel import NovelDB, ChapterDB, CharacterDB
 
 
 router = APIRouter()
+
+
+def _download_response(content: str, filename: str, media_type: str) -> Response:
+    """直接以記憶體內容回傳下載檔案（避免寫入臨時目錄，Windows 無 /tmp）"""
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"
+        },
+    )
 
 
 @router.get("/{novel_id}/json")
@@ -141,19 +152,11 @@ async def export_novel_txt(
             lines.append("")
     
     content = "\n".join(lines)
-    
-    # 建立臨時檔案
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{novel.title}_{timestamp}.txt"
-    temp_path = Path("/tmp") / filename
-    
-    temp_path.write_text(content, encoding="utf-8")
-    
-    return FileResponse(
-        path=str(temp_path),
-        filename=filename,
-        media_type="text/plain; charset=utf-8",
-    )
+
+    return _download_response(content, filename, "text/plain; charset=utf-8")
 
 
 @router.get("/{novel_id}/markdown")
@@ -200,19 +203,11 @@ async def export_novel_markdown(
             lines.append("")
     
     content = "\n".join(lines)
-    
-    # 建立臨時檔案
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{novel.title}_{timestamp}.md"
-    temp_path = Path("/tmp") / filename
-    
-    temp_path.write_text(content, encoding="utf-8")
-    
-    return FileResponse(
-        path=str(temp_path),
-        filename=filename,
-        media_type="text/markdown; charset=utf-8",
-    )
+
+    return _download_response(content, filename, "text/markdown; charset=utf-8")
 
 
 @router.post("/import")

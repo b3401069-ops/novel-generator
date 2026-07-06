@@ -4,6 +4,7 @@ Chapters API Routes
 """
 
 from typing import List, Optional
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,6 +46,30 @@ class ChapterRollbackRequest(BaseModel):
     novel_id: str
     chapter_number: int
     version: int
+
+
+def _save_version(chapter_db: ChapterDB, content: str, instruction: Optional[str] = None) -> None:
+    """
+    寫入新版本。
+
+    注意：versions 是 JSON 欄位，必須整個重新賦值（而非原地 append），
+    否則 SQLAlchemy 偵測不到變更、歷史不會存進資料庫。
+    版本號取歷史最大值 +1，避免回滾後再編輯產生重複版本號。
+    """
+    versions = list(chapter_db.versions or [])
+    new_version = max((v.get("version", 0) for v in versions), default=0) + 1
+    entry = {
+        "version": new_version,
+        "content": content,
+        "timestamp": datetime.now().isoformat(),
+    }
+    if instruction:
+        entry["instruction"] = instruction
+    versions.append(entry)
+
+    chapter_db.content = content
+    chapter_db.version = new_version
+    chapter_db.versions = versions
 
 
 class ChapterResponse(BaseModel):
@@ -188,14 +213,8 @@ async def generate_chapter(
         )
         
         # 更新資料庫
-        chapter_db.content = content
-        chapter_db.version += 1
-        chapter_db.versions = chapter_db.versions or []
-        chapter_db.versions.append({
-            "version": chapter_db.version,
-            "content": content,
-        })
-        
+        _save_version(chapter_db, content)
+
         await db.commit()
         
         return chapter_db.to_dict()
@@ -294,15 +313,8 @@ async def edit_chapter(
         )
         
         # 更新資料庫
-        chapter_db.content = content
-        chapter_db.version += 1
-        chapter_db.versions = chapter_db.versions or []
-        chapter_db.versions.append({
-            "version": chapter_db.version,
-            "content": content,
-            "instruction": request.instruction,
-        })
-        
+        _save_version(chapter_db, content, instruction=request.instruction)
+
         await db.commit()
         
         return chapter_db.to_dict()

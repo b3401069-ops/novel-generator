@@ -6,8 +6,8 @@ Novel Generator - Main Entry Point
     python main.py
     
 訪問地址：
-    http://localhost:9527
-    http://localhost:9527/docs (API文檔)
+    http://localhost:8012
+    http://localhost:8012/docs (API文檔)
 """
 
 import uvicorn

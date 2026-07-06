@@ -36,10 +36,11 @@ app = FastAPI(
 )
 
 # CORS設定
+# 注意：allow_origins=["*"] 不能與 allow_credentials=True 併用（瀏覽器會拒絕）
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
