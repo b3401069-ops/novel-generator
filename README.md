@@ -104,8 +104,18 @@ python main.py
 - `GET /api/v1/chapters/{novel_id}` - 列出章節
 - `GET /api/v1/chapters/{novel_id}/{number}` - 獲取章節
 - `POST /api/v1/chapters/generate` - 生成章節
+- `POST /api/v1/chapters/generate/stream` - 生成章節（SSE 串流，即時輸出）
 - `POST /api/v1/chapters/edit` - 編輯章節
+- `POST /api/v1/chapters/edit/stream` - 編輯章節（SSE 串流，即時輸出）
 - `POST /api/v1/chapters/rollback` - 回滾章節
+
+SSE 串流事件格式（`Content-Type: text/event-stream`，每個事件為一行 `data: JSON`）：
+
+```
+data: {"type": "delta", "text": "生成中的文字片段"}
+data: {"type": "done", "chapter": { ...已存檔的章節資料 }}
+data: {"type": "error", "detail": "錯誤訊息"}
+```
 
 ### 風格
 - `GET /api/v1/styles/` - 列出所有風格
@@ -207,6 +217,31 @@ cloudflared tunnel run novel-generator
 ```
 
 訪問地址：https://inkwell.mingneo.dev
+
+### 🔐 Cloudflare Access 認證（強烈建議）
+
+API 本身**沒有任何認證**，公開暴露等於任何人都能用你的 LLM API 額度生成內容、
+刪除你的小說。掛上 Cloudflare Access（免費 50 個使用者）之後，
+所有請求都要先通過 email 驗證才能到達服務，程式碼一行都不用改。
+
+設定步驟（Cloudflare Dashboard）：
+
+1. 進入 **Zero Trust**（one.dash.cloudflare.com）→ 首次使用需建立 team name（免費方案即可）
+2. **Access → Applications → Add an application → Self-hosted**
+3. 設定：
+   - **Application name**: `Novel Forge`
+   - **Session Duration**: `1 month`（自己用可以設長一點）
+   - **Public hostname**: `inkwell.mingneo.dev`（路徑留空 = 保護整個站）
+4. 建立 Policy：
+   - **Policy name**: `family`（或任意名稱）
+   - **Action**: `Allow`
+   - **Include → Emails**: 填入允許存取的 email（你和共同創作者的信箱）
+5. 儲存。之後開 `https://inkwell.mingneo.dev` 會先看到 Cloudflare 登入頁，
+   輸入 email 收一次性驗證碼（OTP）即可，session 期間內不會再被問。
+
+> 💡 SSE 串流生成與 Cloudflare Tunnel/Access 相容，無需額外設定。
+> 若要讓腳本（如 curl 備份）繞過登入頁，可在 Access 中建立
+> **Service Token**，並在 Policy 加一條 `Service Auth` 規則。
 
 ## 💾 備份系統
 

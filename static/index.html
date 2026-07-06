@@ -851,35 +851,97 @@
             }
         }
 
-        // Generate chapter
-        async function generateChapter(chapterNumber) {
-            if (!currentNovel) return;
+        // SSE stream helper: POST + 逐事件回調
+        // 後端每個事件為一行 "data: {json}"，事件間以空行分隔
+        async function streamRequest(url, body, { onDelta, onDone }) {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
 
-            showToast('正在生成章節，請稍候...');
+            if (!response.ok || !response.body) {
+                throw new Error(`HTTP ${response.status}`);
+            }
 
-            try {
-                const response = await fetch(`${API_BASE}/chapters/generate`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        novel_id: currentNovel.id,
-                        chapter_number: chapterNumber,
-                    }),
-                });
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
 
-                if (!response.ok) {
-                    throw new Error('生成失敗');
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const events = buffer.split('\n\n');
+                buffer = events.pop(); // 最後一段可能不完整，留到下一輪
+
+                for (const raw of events) {
+                    const line = raw.split('\n').find(l => l.startsWith('data: '));
+                    if (!line) continue;
+                    const event = JSON.parse(line.slice(6));
+
+                    if (event.type === 'delta') {
+                        onDelta(event.text);
+                    } else if (event.type === 'done') {
+                        onDone(event.chapter);
+                    } else if (event.type === 'error') {
+                        throw new Error(event.detail);
+                    }
                 }
-
-                showToast('章節生成成功！');
-                await selectNovel(currentNovel.id);
-                viewChapter(chapterNumber);
-            } catch (error) {
-                showToast('生成失敗：' + error.message);
             }
         }
 
-        // Edit chapter
+        // 建立串流顯示區並回傳 append 函數
+        function setupStreamView(chapterNumber, title, label) {
+            const viewContainer = document.getElementById('chapter-view');
+            viewContainer.style.display = 'block';
+            viewContainer.innerHTML = `
+                <div class="chapter-header">
+                    <div>
+                        <div class="chapter-title">第${chapterNumber}章：${title || '未命名'}</div>
+                        <div class="chapter-meta"><span class="spinner" style="display: inline-block; vertical-align: middle;"></span> ${label}</div>
+                    </div>
+                </div>
+                <div class="chapter-content" id="stream-output"></div>
+            `;
+            viewContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            const output = document.getElementById('stream-output');
+            let text = '';
+            return (delta) => {
+                text += delta;
+                output.textContent = text;
+            };
+        }
+
+        // Generate chapter (SSE 串流)
+        async function generateChapter(chapterNumber) {
+            if (!currentNovel) return;
+
+            const chapter = currentNovel.chapters.find(c => c.number === chapterNumber);
+            const appendText = setupStreamView(chapterNumber, chapter?.title, '生成中，文字會即時出現…');
+
+            try {
+                await streamRequest(`${API_BASE}/chapters/generate/stream`, {
+                    novel_id: currentNovel.id,
+                    chapter_number: chapterNumber,
+                }, {
+                    onDelta: appendText,
+                    onDone: async () => {
+                        showToast('章節生成成功！');
+                        await selectNovel(currentNovel.id);
+                        viewChapter(chapterNumber);
+                    },
+                });
+            } catch (error) {
+                showToast('生成失敗：' + error.message);
+                await selectNovel(currentNovel.id);
+                viewChapter(chapterNumber);
+            }
+        }
+
+        // Edit chapter (SSE 串流)
         async function editChapter(chapterNumber) {
             if (!currentNovel) return;
 
@@ -889,28 +951,26 @@
                 return;
             }
 
-            showToast('正在修改章節，請稍候...');
+            const chapter = currentNovel.chapters.find(c => c.number === chapterNumber);
+            const appendText = setupStreamView(chapterNumber, chapter?.title, '修改中，文字會即時出現…');
 
             try {
-                const response = await fetch(`${API_BASE}/chapters/edit`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        novel_id: currentNovel.id,
-                        chapter_number: chapterNumber,
-                        instruction: instruction,
-                    }),
+                await streamRequest(`${API_BASE}/chapters/edit/stream`, {
+                    novel_id: currentNovel.id,
+                    chapter_number: chapterNumber,
+                    instruction: instruction,
+                }, {
+                    onDelta: appendText,
+                    onDone: async () => {
+                        showToast('章節修改成功！');
+                        await selectNovel(currentNovel.id);
+                        viewChapter(chapterNumber);
+                    },
                 });
-
-                if (!response.ok) {
-                    throw new Error('修改失敗');
-                }
-
-                showToast('章節修改成功！');
-                await selectNovel(currentNovel.id);
-                viewChapter(chapterNumber);
             } catch (error) {
                 showToast('修改失敗：' + error.message);
+                await selectNovel(currentNovel.id);
+                viewChapter(chapterNumber);
             }
         }
 

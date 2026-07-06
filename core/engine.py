@@ -194,18 +194,103 @@ class NovelEngine:
         Returns:
             章節內容
         """
+        system_prompt, user_prompt = self._build_chapter_prompts(
+            novel, chapter_number, previous_summary
+        )
+        chapter = novel.chapters[chapter_number - 1]
+
+        # 調用LLM
+        response = await self.client.chat.completions.create(
+            model=self.settings.llm_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=self.settings.llm_temperature,
+            max_tokens=self.settings.llm_max_tokens,
+        )
+        
+        content = response.choices[0].message.content
+
+        # 後處理
+        if self.settings.anti_ai_enabled:
+            content = clean_text(
+                content,
+                strength=self.settings.anti_ai_strength,
+                style=novel.style,
+            )
+
+        # 保存到章節（版本記錄由 API 層的 _save_version 負責）
+        chapter.content = content
+
+        return content
+
+    async def generate_chapter_stream(
+        self,
+        novel: Novel,
+        chapter_number: int,
+        previous_summary: str = "",
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        串流生成章節內容
+
+        逐塊 yield {"type": "delta", "text": ...}，
+        全部生成後 yield {"type": "done", "content": 後處理過的全文}。
+        """
+        system_prompt, user_prompt = self._build_chapter_prompts(
+            novel, chapter_number, previous_summary
+        )
+
+        stream = await self.client.chat.completions.create(
+            model=self.settings.llm_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=self.settings.llm_temperature,
+            max_tokens=self.settings.llm_max_tokens,
+            stream=True,
+        )
+
+        parts: List[str] = []
+        async for chunk in stream:
+            if not chunk.choices:
+                continue  # 部分供應商會送出不含 choices 的 usage chunk
+            delta = chunk.choices[0].delta.content
+            if delta:
+                parts.append(delta)
+                yield {"type": "delta", "text": delta}
+
+        content = "".join(parts)
+        if self.settings.anti_ai_enabled:
+            content = clean_text(
+                content,
+                strength=self.settings.anti_ai_strength,
+                style=novel.style,
+            )
+
+        novel.chapters[chapter_number - 1].content = content
+        yield {"type": "done", "content": content}
+
+    def _build_chapter_prompts(
+        self,
+        novel: Novel,
+        chapter_number: int,
+        previous_summary: str = "",
+    ) -> tuple:
+        """組裝章節生成的 system / user 提示詞"""
         if chapter_number < 1 or chapter_number > len(novel.chapters):
             raise ValueError(f"無效的章節編號: {chapter_number}")
-        
+
         chapter = novel.chapters[chapter_number - 1]
         style_config = self.style_engine.get_style(novel.style)
-        
+
         # 構建上下文
         context = self._build_context(novel, chapter_number, previous_summary)
-        
+
         # 構建系統提示詞
         system_prompt = get_anti_ai_system_prompt(style_config.system_prompt)
-        
+
         # 構建用戶提示詞
         user_prompt = f"""
 {CHAPTER_WRITING_PROMPT}
@@ -226,7 +311,32 @@ class NovelEngine:
 【字數要求】
 約{self.settings.default_words_per_chapter}字
 """
+        return system_prompt, user_prompt
+
+    async def edit_chapter(
+        self,
+        novel: Novel,
+        chapter_number: int,
+        instruction: str,
+        paragraph_id: Optional[int] = None,
+    ) -> str:
+        """
+        編輯章節
         
+        Args:
+            novel: 小說對象
+            chapter_number: 章節編號
+            instruction: 修改指示
+            paragraph_id: 段落ID（可選，不指定則整章修改）
+            
+        Returns:
+            修改後的內容
+        """
+        system_prompt, user_prompt = self._build_edit_prompts(
+            novel, chapter_number, instruction, paragraph_id
+        )
+        chapter = novel.chapters[chapter_number - 1]
+
         # 調用LLM
         response = await self.client.chat.completions.create(
             model=self.settings.llm_model,
@@ -248,60 +358,105 @@ class NovelEngine:
                 style=novel.style,
             )
         
-        # 保存到章節
-        chapter.content = content
-        chapter.version += 1
-        chapter.versions.append({
-            "version": chapter.version,
-            "content": content,
-            "timestamp": datetime.now().isoformat(),
-        })
-        
-        return content
+        # 更新章節（版本記錄由 API 層的 _save_version 負責）
+        chapter.content = self._apply_edit(chapter.content, content, paragraph_id)
 
-    async def edit_chapter(
+        return chapter.content
+
+    async def edit_chapter_stream(
         self,
         novel: Novel,
         chapter_number: int,
         instruction: str,
         paragraph_id: Optional[int] = None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        串流編輯章節
+
+        逐塊 yield {"type": "delta", "text": ...}（段落編輯時是新段落內容），
+        完成後 yield {"type": "done", "content": 更新後的整章內容}。
+        """
+        system_prompt, user_prompt = self._build_edit_prompts(
+            novel, chapter_number, instruction, paragraph_id
+        )
+        chapter = novel.chapters[chapter_number - 1]
+
+        stream = await self.client.chat.completions.create(
+            model=self.settings.llm_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=self.settings.llm_temperature,
+            max_tokens=self.settings.llm_max_tokens,
+            stream=True,
+        )
+
+        parts: List[str] = []
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                parts.append(delta)
+                yield {"type": "delta", "text": delta}
+
+        content = "".join(parts)
+        if self.settings.anti_ai_enabled:
+            content = clean_text(
+                content,
+                strength=self.settings.anti_ai_strength,
+                style=novel.style,
+            )
+
+        chapter.content = self._apply_edit(chapter.content, content, paragraph_id)
+        yield {"type": "done", "content": chapter.content}
+
+    @staticmethod
+    def _apply_edit(
+        original: str,
+        new_text: str,
+        paragraph_id: Optional[int] = None,
     ) -> str:
-        """
-        編輯章節
-        
-        Args:
-            novel: 小說對象
-            chapter_number: 章節編號
-            instruction: 修改指示
-            paragraph_id: 段落ID（可選，不指定則整章修改）
-            
-        Returns:
-            修改後的內容
-        """
+        """將編輯結果套用回章節：段落編輯只替換該段，否則整章替換"""
+        if paragraph_id is None:
+            return new_text
+        paragraphs = original.split('\n\n')
+        paragraphs[paragraph_id] = new_text
+        return '\n\n'.join(paragraphs)
+
+    def _build_edit_prompts(
+        self,
+        novel: Novel,
+        chapter_number: int,
+        instruction: str,
+        paragraph_id: Optional[int] = None,
+    ) -> tuple:
+        """組裝章節編輯的 system / user 提示詞"""
         if chapter_number < 1 or chapter_number > len(novel.chapters):
             raise ValueError(f"無效的章節編號: {chapter_number}")
-        
+
         chapter = novel.chapters[chapter_number - 1]
-        
+
         if not chapter.content:
             raise ValueError(f"第{chapter_number}章尚未生成")
-        
+
         style_config = self.style_engine.get_style(novel.style)
-        
+
         # 構建系統提示詞
         system_prompt = get_anti_ai_system_prompt(style_config.system_prompt)
-        
+
         # 構建用戶提示詞
         if paragraph_id is not None:
             # 修改特定段落
             paragraphs = chapter.content.split('\n\n')
             if paragraph_id < 0 or paragraph_id >= len(paragraphs):
                 raise ValueError(f"無效的段落ID: {paragraph_id}")
-            
+
             original_text = paragraphs[paragraph_id]
             context_before = '\n\n'.join(paragraphs[:paragraph_id])[-500:] if paragraph_id > 0 else ""
             context_after = '\n\n'.join(paragraphs[paragraph_id+1:])[:500] if paragraph_id < len(paragraphs) - 1 else ""
-            
+
             user_prompt = f"""
 {CHAPTER_EDITING_PROMPT}
 
@@ -332,46 +487,7 @@ class NovelEngine:
 【章節大綱】
 {chapter.summary}
 """
-        
-        # 調用LLM
-        response = await self.client.chat.completions.create(
-            model=self.settings.llm_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=self.settings.llm_temperature,
-            max_tokens=self.settings.llm_max_tokens,
-        )
-        
-        content = response.choices[0].message.content
-        
-        # 後處理
-        if self.settings.anti_ai_enabled:
-            content = clean_text(
-                content,
-                strength=self.settings.anti_ai_strength,
-                style=novel.style,
-            )
-        
-        # 更新章節
-        if paragraph_id is not None:
-            paragraphs = chapter.content.split('\n\n')
-            paragraphs[paragraph_id] = content
-            chapter.content = '\n\n'.join(paragraphs)
-        else:
-            chapter.content = content
-        
-        # 保存版本
-        chapter.version += 1
-        chapter.versions.append({
-            "version": chapter.version,
-            "content": chapter.content,
-            "timestamp": datetime.now().isoformat(),
-            "instruction": instruction,
-        })
-        
-        return chapter.content
+        return system_prompt, user_prompt
 
     async def generate_poetry(
         self,

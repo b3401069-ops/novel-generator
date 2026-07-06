@@ -3,17 +3,19 @@
 Chapters API Routes
 """
 
-from typing import List, Optional
+import json
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 
-from models.database import get_db
-from models.novel import NovelDB, ChapterDB
-from core.engine import NovelEngine
+from models.database import get_db, async_session
+from models.novel import NovelDB, ChapterDB, CharacterDB
+from core.engine import NovelEngine, Novel, Chapter, Character
 from config.settings import get_settings
 
 
@@ -70,6 +72,73 @@ def _save_version(chapter_db: ChapterDB, content: str, instruction: Optional[str
     chapter_db.content = content
     chapter_db.version = new_version
     chapter_db.versions = versions
+
+
+async def _load_engine_novel(
+    db: AsyncSession,
+    novel_id: str,
+) -> Tuple[Novel, Dict[int, ChapterDB]]:
+    """
+    從資料庫載入小說並轉換為引擎物件。
+
+    Returns:
+        (引擎 Novel 物件, {章節編號: ChapterDB})
+    """
+    result = await db.execute(select(NovelDB).where(NovelDB.id == novel_id))
+    novel_db = result.scalar_one_or_none()
+    if not novel_db:
+        raise HTTPException(status_code=404, detail="小說不存在")
+
+    chaps_result = await db.execute(
+        select(ChapterDB)
+        .where(ChapterDB.novel_id == novel_id)
+        .order_by(ChapterDB.number)
+    )
+    all_chapters = chaps_result.scalars().all()
+
+    chars_result = await db.execute(
+        select(CharacterDB).where(CharacterDB.novel_id == novel_id)
+    )
+    characters = chars_result.scalars().all()
+
+    novel = Novel(
+        id=novel_db.id,
+        title=novel_db.title,
+        summary=novel_db.summary,
+        style=novel_db.style,
+        characters=[
+            Character(
+                name=char.name,
+                description=char.description,
+                role=char.role,
+                traits=char.traits or [],
+            )
+            for char in characters
+        ],
+        chapters=[
+            Chapter(
+                number=chap.number,
+                title=chap.title,
+                summary=chap.summary,
+                content=chap.content,
+                key_events=chap.key_events or [],
+                foreshadowing=chap.foreshadowing or [],
+            )
+            for chap in all_chapters
+        ],
+    )
+    return novel, {chap.number: chap for chap in all_chapters}
+
+
+def _sse(data: dict) -> str:
+    """編碼單一 SSE 事件"""
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",  # 避免反向代理緩衝，讓串流即時送達
+}
 
 
 class ChapterResponse(BaseModel):
@@ -134,77 +203,16 @@ async def generate_chapter(
 ):
     """
     生成章節內容
-    
+
     根據章節大綱生成完整內容
     """
-    # 獲取小說
-    result = await db.execute(
-        select(NovelDB).where(NovelDB.id == request.novel_id)
-    )
-    novel_db = result.scalar_one_or_none()
-    
-    if not novel_db:
-        raise HTTPException(status_code=404, detail="小說不存在")
-    
-    # 獲取章節
-    chap_result = await db.execute(
-        select(ChapterDB).where(
-            ChapterDB.novel_id == request.novel_id,
-            ChapterDB.number == request.chapter_number,
-        )
-    )
-    chapter_db = chap_result.scalar_one_or_none()
-    
+    novel, chapters_by_number = await _load_engine_novel(db, request.novel_id)
+    chapter_db = chapters_by_number.get(request.chapter_number)
+
     if not chapter_db:
         raise HTTPException(status_code=404, detail="章節不存在")
-    
+
     try:
-        # 轉換為引擎對象
-        from core.engine import Novel, Chapter, Character
-        
-        # 獲取所有章節
-        all_chaps_result = await db.execute(
-            select(ChapterDB)
-            .where(ChapterDB.novel_id == request.novel_id)
-            .order_by(ChapterDB.number)
-        )
-        all_chapters = all_chaps_result.scalars().all()
-        
-        # 獲取所有角色
-        from models.novel import CharacterDB
-        chars_result = await db.execute(
-            select(CharacterDB).where(CharacterDB.novel_id == request.novel_id)
-        )
-        characters = chars_result.scalars().all()
-        
-        # 構建小說對象
-        novel = Novel(
-            id=novel_db.id,
-            title=novel_db.title,
-            summary=novel_db.summary,
-            style=novel_db.style,
-            characters=[
-                Character(
-                    name=char.name,
-                    description=char.description,
-                    role=char.role,
-                    traits=char.traits or [],
-                )
-                for char in characters
-            ],
-            chapters=[
-                Chapter(
-                    number=chap.number,
-                    title=chap.title,
-                    summary=chap.summary,
-                    content=chap.content,
-                    key_events=chap.key_events or [],
-                    foreshadowing=chap.foreshadowing or [],
-                )
-                for chap in all_chapters
-            ],
-        )
-        
         # 生成章節
         content = await engine.generate_chapter(
             novel=novel,
@@ -231,79 +239,19 @@ async def edit_chapter(
 ):
     """
     編輯章節
-    
+
     根據修改要求更新章節內容
     """
-    # 獲取小說和章節
-    result = await db.execute(
-        select(NovelDB).where(NovelDB.id == request.novel_id)
-    )
-    novel_db = result.scalar_one_or_none()
-    
-    if not novel_db:
-        raise HTTPException(status_code=404, detail="小說不存在")
-    
-    chap_result = await db.execute(
-        select(ChapterDB).where(
-            ChapterDB.novel_id == request.novel_id,
-            ChapterDB.number == request.chapter_number,
-        )
-    )
-    chapter_db = chap_result.scalar_one_or_none()
-    
+    novel, chapters_by_number = await _load_engine_novel(db, request.novel_id)
+    chapter_db = chapters_by_number.get(request.chapter_number)
+
     if not chapter_db:
         raise HTTPException(status_code=404, detail="章節不存在")
-    
+
     if not chapter_db.content:
         raise HTTPException(status_code=400, detail="章節尚未生成，無法編輯")
-    
+
     try:
-        # 轉換為引擎對象
-        from core.engine import Novel, Chapter, Character
-        
-        # 獲取所有章節
-        all_chaps_result = await db.execute(
-            select(ChapterDB)
-            .where(ChapterDB.novel_id == request.novel_id)
-            .order_by(ChapterDB.number)
-        )
-        all_chapters = all_chaps_result.scalars().all()
-        
-        # 獲取所有角色
-        from models.novel import CharacterDB
-        chars_result = await db.execute(
-            select(CharacterDB).where(CharacterDB.novel_id == request.novel_id)
-        )
-        characters = chars_result.scalars().all()
-        
-        # 構建小說對象
-        novel = Novel(
-            id=novel_db.id,
-            title=novel_db.title,
-            summary=novel_db.summary,
-            style=novel_db.style,
-            characters=[
-                Character(
-                    name=char.name,
-                    description=char.description,
-                    role=char.role,
-                    traits=char.traits or [],
-                )
-                for char in characters
-            ],
-            chapters=[
-                Chapter(
-                    number=chap.number,
-                    title=chap.title,
-                    summary=chap.summary,
-                    content=chap.content,
-                    key_events=chap.key_events or [],
-                    foreshadowing=chap.foreshadowing or [],
-                )
-                for chap in all_chapters
-            ],
-        )
-        
         # 編輯章節
         content = await engine.edit_chapter(
             novel=novel,
@@ -322,6 +270,96 @@ async def edit_chapter(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/generate/stream")
+async def generate_chapter_stream(request: ChapterGenerateRequest):
+    """
+    串流生成章節內容（SSE）
+
+    事件格式（每行 data: JSON）：
+    - {"type": "delta", "text": "..."}      生成中的文字片段
+    - {"type": "done", "chapter": {...}}    完成，含已存檔的章節資料
+    - {"type": "error", "detail": "..."}    發生錯誤
+    """
+    async def event_stream():
+        # 串流回應期間需要自行管理 session，不能用 Depends(get_db)
+        # （yield 依賴的關閉時機與串流生命週期不保證相容）
+        try:
+            async with async_session() as db:
+                novel, chapters_by_number = await _load_engine_novel(db, request.novel_id)
+                chapter_db = chapters_by_number.get(request.chapter_number)
+                if not chapter_db:
+                    yield _sse({"type": "error", "detail": "章節不存在"})
+                    return
+
+                async for event in engine.generate_chapter_stream(
+                    novel=novel,
+                    chapter_number=request.chapter_number,
+                    previous_summary=request.previous_summary,
+                ):
+                    if event["type"] == "done":
+                        _save_version(chapter_db, event["content"])
+                        await db.commit()
+                        yield _sse({"type": "done", "chapter": chapter_db.to_dict()})
+                    else:
+                        yield _sse(event)
+        except HTTPException as e:
+            yield _sse({"type": "error", "detail": e.detail})
+        except Exception as e:
+            yield _sse({"type": "error", "detail": str(e)})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
+
+
+@router.post("/edit/stream")
+async def edit_chapter_stream(request: ChapterEditRequest):
+    """
+    串流編輯章節（SSE）
+
+    事件格式同 /generate/stream。
+    """
+    async def event_stream():
+        try:
+            async with async_session() as db:
+                novel, chapters_by_number = await _load_engine_novel(db, request.novel_id)
+                chapter_db = chapters_by_number.get(request.chapter_number)
+                if not chapter_db:
+                    yield _sse({"type": "error", "detail": "章節不存在"})
+                    return
+                if not chapter_db.content:
+                    yield _sse({"type": "error", "detail": "章節尚未生成，無法編輯"})
+                    return
+
+                async for event in engine.edit_chapter_stream(
+                    novel=novel,
+                    chapter_number=request.chapter_number,
+                    instruction=request.instruction,
+                    paragraph_id=request.paragraph_id,
+                ):
+                    if event["type"] == "done":
+                        _save_version(
+                            chapter_db, event["content"],
+                            instruction=request.instruction,
+                        )
+                        await db.commit()
+                        yield _sse({"type": "done", "chapter": chapter_db.to_dict()})
+                    else:
+                        yield _sse(event)
+        except HTTPException as e:
+            yield _sse({"type": "error", "detail": e.detail})
+        except Exception as e:
+            yield _sse({"type": "error", "detail": str(e)})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
 
 
 @router.post("/rollback", response_model=ChapterResponse)
