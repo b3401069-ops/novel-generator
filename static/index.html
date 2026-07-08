@@ -443,6 +443,51 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
+        /* 章節：左列表右內容 兩欄式 */
+        .chapter-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            margin-top: 20px;
+            align-items: start;
+        }
+
+        .chapter-list-pane {
+            position: sticky;
+            top: 20px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+
+        .chapter-list-pane .chapter-list {
+            margin-top: 10px;
+        }
+
+        /* 左側列表變窄，章節項目改直排較省空間 */
+        .chapter-list-pane .chapter-item {
+            flex-wrap: wrap;
+            gap: 4px 8px;
+        }
+
+        .chapter-list-pane .chapter-item .number {
+            width: auto;
+        }
+
+        .chapter-view-pane {
+            min-width: 0;  /* 讓長文字能正常換行、不撐破格線 */
+        }
+
+        @media (max-width: 1100px) {
+            /* 空間不足時改回上下堆疊 */
+            .chapter-layout {
+                grid-template-columns: 1fr;
+            }
+            .chapter-list-pane {
+                position: static;
+                max-height: 320px;  /* 列表過長就內部捲動，不占滿整頁 */
+            }
+        }
+
         /* 合併清單項目 */
         .merge-item {
             display: flex;
@@ -841,22 +886,29 @@
                     `).join('')}
                 </div>
 
-                <h3>章節</h3>
-                <div class="chapter-list">
-                    ${currentNovel.chapters.map(chap => `
-                        <div class="chapter-item ${currentChapter?.number === chap.number ? 'active' : ''}"
-                             onclick="viewChapter(${chap.number})">
-                            <span class="number">第${chap.number}章</span>
-                            <span class="title">${chap.title || '未命名'}</span>
-                            <span class="status ${chap.content ? 'status-generated' : 'status-pending'}">
-                                ${chap.content ? '已生成' : '待生成'}
-                            </span>
+                <div class="chapter-layout">
+                    <div class="chapter-list-pane">
+                        <h3>章節</h3>
+                        <div class="chapter-list">
+                            ${currentNovel.chapters.map(chap => `
+                                <div class="chapter-item ${currentChapter?.number === chap.number ? 'active' : ''}"
+                                     data-chapter="${chap.number}"
+                                     onclick="viewChapter(${chap.number})">
+                                    <span class="number">第${chap.number}章</span>
+                                    <span class="title">${chap.title || '未命名'}</span>
+                                    <span class="status ${chap.content ? 'status-generated' : 'status-pending'}">
+                                        ${chap.content ? '已生成' : '待生成'}
+                                    </span>
+                                </div>
+                            `).join('')}
                         </div>
-                    `).join('')}
-                </div>
+                    </div>
 
-                <div id="chapter-view" class="chapter-view" style="display: none;">
-                    <!-- 由JavaScript動態生成 -->
+                    <div id="chapter-view" class="chapter-view-pane">
+                        <div style="text-align: center; color: var(--text-muted); padding: 40px 20px;">
+                            ← 從左側選擇章節來閱讀或編輯
+                        </div>
+                    </div>
                 </div>
             `;
         }
@@ -867,7 +919,11 @@
             if (!chapter) return;
 
             currentChapter = chapter;
-            renderNovelDetail();
+            // 只更新左側列表的 active 標示 + 右側內容，不重建整個面板
+            // （避免每次點章節就把左側列表捲回最上面）
+            document.querySelectorAll('#novel-detail .chapter-item').forEach(el => {
+                el.classList.toggle('active', Number(el.dataset.chapter) === chapterNumber);
+            });
 
             const viewContainer = document.getElementById('chapter-view');
             viewContainer.style.display = 'block';
@@ -884,24 +940,26 @@
                         </button>
                     </div>
                 `;
-                return;
+            } else {
+                // 編輯鈕放在標題列左側；編輯框容器放在內容「上方」，
+                // 點編輯後直接在標題下方出現，不必滑到整章最底
+                viewContainer.innerHTML = `
+                    <div class="chapter-header" style="justify-content: flex-start; gap: 16px; align-items: center;">
+                        <button class="btn btn-secondary" onclick="showEditPanel(${chapter.number})">
+                            ✏️ 編輯
+                        </button>
+                        <div>
+                            <div class="chapter-title">第${chapter.number}章：${chapter.title || '未命名'}</div>
+                            <div class="chapter-meta">版本 ${chapter.version} · ${chapter.content.length} 字</div>
+                        </div>
+                    </div>
+                    <div id="edit-panel-container"></div>
+                    <div class="chapter-content">${formatContent(chapter.content)}</div>
+                `;
             }
 
-            // 編輯鈕放在標題列左側；編輯框容器放在內容「上方」，
-            // 點編輯後直接在標題下方出現，不必滑到整章最底
-            viewContainer.innerHTML = `
-                <div class="chapter-header" style="justify-content: flex-start; gap: 16px; align-items: center;">
-                    <button class="btn btn-secondary" onclick="showEditPanel(${chapter.number})">
-                        ✏️ 編輯
-                    </button>
-                    <div>
-                        <div class="chapter-title">第${chapter.number}章：${chapter.title || '未命名'}</div>
-                        <div class="chapter-meta">版本 ${chapter.version} · ${chapter.content.length} 字</div>
-                    </div>
-                </div>
-                <div id="edit-panel-container"></div>
-                <div class="chapter-content">${formatContent(chapter.content)}</div>
-            `;
+            // 切到新章節時把右側內容捲到頂端（長章節間切換更順手）
+            viewContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         // Format content
