@@ -887,20 +887,20 @@
                 return;
             }
 
+            // 編輯鈕放在標題列左側；編輯框容器放在內容「上方」，
+            // 點編輯後直接在標題下方出現，不必滑到整章最底
             viewContainer.innerHTML = `
-                <div class="chapter-header">
+                <div class="chapter-header" style="justify-content: flex-start; gap: 16px; align-items: center;">
+                    <button class="btn btn-secondary" onclick="showEditPanel(${chapter.number})">
+                        ✏️ 編輯
+                    </button>
                     <div>
                         <div class="chapter-title">第${chapter.number}章：${chapter.title || '未命名'}</div>
                         <div class="chapter-meta">版本 ${chapter.version} · ${chapter.content.length} 字</div>
                     </div>
-                    <div class="btn-group">
-                        <button class="btn btn-secondary" onclick="showEditPanel(${chapter.number})">
-                            ✏️ 編輯
-                        </button>
-                    </div>
                 </div>
-                <div class="chapter-content">${formatContent(chapter.content)}</div>
                 <div id="edit-panel-container"></div>
+                <div class="chapter-content">${formatContent(chapter.content)}</div>
             `;
         }
 
