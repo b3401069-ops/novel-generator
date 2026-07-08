@@ -29,8 +29,14 @@ class NovelDB(Base):
     chapters = relationship("ChapterDB", back_populates="novel", cascade="all, delete-orphan")
     characters = relationship("CharacterDB", back_populates="novel", cascade="all, delete-orphan")
 
-    def to_dict(self):
-        """轉換為字典"""
+    def to_dict(self, chapter_count: int = 0, character_count: int = 0):
+        """
+        轉換為字典
+
+        注意：chapter_count / character_count 由呼叫端明確傳入。
+        不能在這裡取 len(self.chapters) — async SQLAlchemy 下 lazy 關聯
+        未載入時會回傳空集合或報錯，導致列表顯示 0 章。
+        """
         return {
             "id": self.id,
             "title": self.title,
@@ -38,8 +44,8 @@ class NovelDB(Base):
             "style": self.style,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "chapter_count": len(self.chapters) if self.chapters else 0,
-            "character_count": len(self.characters) if self.characters else 0,
+            "chapter_count": chapter_count,
+            "character_count": character_count,
         }
 
 

@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from pydantic import BaseModel
 
 from models.database import get_db
@@ -66,7 +66,26 @@ async def list_novels(db: AsyncSession = Depends(get_db)):
     """列出所有小說"""
     result = await db.execute(select(NovelDB).order_by(NovelDB.updated_at.desc()))
     novels = result.scalars().all()
-    return [novel.to_dict() for novel in novels]
+
+    # 用聚合查詢統計章節/角色數（避免逐本 lazy load）
+    chap_counts = dict(
+        (await db.execute(
+            select(ChapterDB.novel_id, func.count()).group_by(ChapterDB.novel_id)
+        )).all()
+    )
+    char_counts = dict(
+        (await db.execute(
+            select(CharacterDB.novel_id, func.count()).group_by(CharacterDB.novel_id)
+        )).all()
+    )
+
+    return [
+        novel.to_dict(
+            chapter_count=chap_counts.get(novel.id, 0),
+            character_count=char_counts.get(novel.id, 0),
+        )
+        for novel in novels
+    ]
 
 
 @router.post("/", response_model=NovelResponse)
@@ -121,9 +140,12 @@ async def create_novel(
             db.add(chap_db)
         
         await db.commit()
-        
-        return novel_db.to_dict()
-    
+
+        return novel_db.to_dict(
+            chapter_count=len(novel.chapters),
+            character_count=len(novel.characters),
+        )
+
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -158,7 +180,10 @@ async def get_novel(
     chapters = chaps_result.scalars().all()
     
     return {
-        **novel.to_dict(),
+        **novel.to_dict(
+            chapter_count=len(chapters),
+            character_count=len(characters),
+        ),
         "characters": [char.to_dict() for char in characters],
         "chapters": [chap.to_dict() for chap in chapters],
     }

@@ -11,6 +11,25 @@ from pydantic_settings import BaseSettings
 BASE_DIR = Path(__file__).parent.parent
 
 
+def _load_hermes_config():
+    """從 Hermes 設定檔讀取 LLM 設定作為 fallback"""
+    try:
+        import yaml
+        hermes_config = Path.home() / ".hermes" / "config.yaml"
+        if hermes_config.exists():
+            with open(hermes_config) as f:
+                mc = yaml.safe_load(f)["model"]
+            return {
+                "llm_api_base": mc.get("base_url", ""),
+                "llm_api_key": mc.get("api_key", ""),
+                "llm_model": mc.get("default", ""),
+                "llm_max_tokens": mc.get("max_tokens", 8192),
+            }
+    except Exception:
+        pass
+    return {}
+
+
 class Settings(BaseSettings):
     """應用設定"""
 
@@ -62,5 +81,12 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    """取得設定實例"""
-    return Settings()
+    """取得設定實例（.env 優先，Hermes 設定作為 fallback）"""
+    settings = Settings()
+    hermes = _load_hermes_config()
+    # 如果 .env 沒設定 LLM API key（空的或是範例佔位符），從 Hermes fallback
+    if not settings.llm_api_key or settings.llm_api_key.startswith("your_"):
+        for key, val in hermes.items():
+            if val:
+                object.__setattr__(settings, key, val)
+    return settings

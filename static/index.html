@@ -554,8 +554,10 @@
         });
 
         // Section navigation
+        // 注意：只隱藏三個頂層區塊。不能用 '.content-area' 全選，
+        // 因為 #novel-detail 也有這個 class，會被誤藏且再也不顯示
         function showSection(section) {
-            document.querySelectorAll('.content-area, .main-layout').forEach(el => {
+            document.querySelectorAll('#section-create, #section-library, #section-styles').forEach(el => {
                 el.style.display = 'none';
             });
             document.querySelectorAll('.nav-btn').forEach(btn => {

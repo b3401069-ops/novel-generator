@@ -5,6 +5,7 @@ Database Configuration
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from config.settings import get_settings
 
@@ -15,6 +16,7 @@ engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
     future=True,
+    poolclass=NullPool,  # SQLite 不支援連線池，避免 greenlet 衝突
 )
 
 # 建立異步Session工廠
