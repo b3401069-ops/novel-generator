@@ -30,60 +30,69 @@
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
+            padding-left: 200px;  /* 留給左側固定側欄 */
         }
 
         .container {
             max-width: 1400px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 24px;
         }
 
-        /* Header */
-        header {
+        /* 左側固定導覽側欄 */
+        .side-nav {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 200px;
             background: var(--bg-card);
-            border-bottom: 1px solid var(--border);
-            padding: 15px 0;
-            margin-bottom: 30px;
-        }
-
-        .header-content {
+            border-right: 1px solid var(--border);
+            padding: 24px 16px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            gap: 24px;
+            z-index: 100;
+            overflow-y: auto;
         }
 
         .logo {
             display: flex;
-            align-items: center;
-            gap: 10px;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
         }
 
         .logo h1 {
-            font-size: 24px;
+            font-size: 22px;
             background: linear-gradient(135deg, var(--primary), #a78bfa);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
         .logo span {
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-muted);
         }
 
-        /* Navigation */
+        /* Navigation（直排）*/
         nav {
             display: flex;
+            flex-direction: column;
             gap: 10px;
         }
 
         .nav-btn {
-            padding: 8px 16px;
+            padding: 12px 16px;
             background: var(--bg-input);
             border: 1px solid var(--border);
             border-radius: 8px;
             color: var(--text);
             cursor: pointer;
             transition: all 0.2s;
+            text-align: left;
+            width: 100%;
+            font-size: 15px;
         }
 
         .nav-btn:hover {
@@ -434,8 +443,91 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
+        /* 合併清單項目 */
+        .merge-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 15px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .merge-item:hover {
+            border-color: var(--primary);
+        }
+
+        .merge-item.selected {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.15);
+        }
+
+        .merge-item .order-badge {
+            width: 26px;
+            height: 26px;
+            flex-shrink: 0;
+            border-radius: 50%;
+            background: var(--border);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .merge-item.selected .order-badge {
+            background: var(--primary);
+            color: white;
+        }
+
+        .merge-item .merge-info h4 {
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+
+        .merge-item .merge-info p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
+            /* 手機版：側欄改回頂部橫排 */
+            body {
+                padding-left: 0;
+            }
+
+            .side-nav {
+                position: static;
+                width: auto;
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+                padding: 12px 16px;
+                gap: 12px;
+            }
+
+            .side-nav nav {
+                flex-direction: row;
+                gap: 8px;
+            }
+
+            .side-nav .nav-btn {
+                width: auto;
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+
+            .logo {
+                flex-direction: row;
+                align-items: baseline;
+                gap: 8px;
+            }
+
             .main-layout {
                 grid-template-columns: 1fr;
             }
@@ -451,19 +543,18 @@
     </style>
 </head>
 <body>
-    <header>
-        <div class="container header-content">
-            <div class="logo">
-                <h1>📚 小說工坊</h1>
-                <span>Novel Forge</span>
-            </div>
-            <nav>
-                <button class="nav-btn active" onclick="showSection('create')">✨ 創建小說</button>
-                <button class="nav-btn" onclick="showSection('library')">📖 我的小說</button>
-                <button class="nav-btn" onclick="showSection('styles')">🎨 風格庫</button>
-            </nav>
+    <aside class="side-nav">
+        <div class="logo">
+            <h1>📚 小說工坊</h1>
+            <span>Novel Forge</span>
         </div>
-    </header>
+        <nav>
+            <button class="nav-btn active" onclick="showSection('create')">✨ 創建小說</button>
+            <button class="nav-btn" onclick="showSection('library')">📖 我的小說</button>
+            <button class="nav-btn" onclick="showSection('merge')">🔗 合併長篇</button>
+            <button class="nav-btn" onclick="showSection('styles')">🎨 風格庫</button>
+        </nav>
+    </aside>
 
     <div class="container">
         <!-- Create Section -->
@@ -498,7 +589,7 @@
                 </div>
                 <div class="form-group">
                     <label>📏 每章字數</label>
-                    <input type="number" id="words-per-chapter" value="3000" min="500" max="10000">
+                    <input type="number" id="words-per-chapter" value="10000" min="500" max="20000">
                 </div>
             </div>
 
@@ -535,6 +626,36 @@
                 <!-- 由JavaScript動態生成 -->
             </div>
         </div>
+
+        <!-- Merge Section -->
+        <div id="section-merge" class="content-area" style="display: none;">
+            <h2>🔗 合併成長篇</h2>
+            <p style="color: var(--text-muted); margin: 10px 0 20px;">
+                依「勾選順序」把多部短篇合併成一部新的長篇小說。<br>
+                AI 會在各短篇之間補足銜接情節；章節會重新編號，你需要為新長篇取一個名字。
+            </p>
+
+            <div class="form-group">
+                <label>📕 新長篇小說名稱</label>
+                <input type="text" id="merge-title" placeholder="例如：地心龍藏 完整版">
+            </div>
+
+            <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px; cursor: pointer;">
+                <input type="checkbox" id="merge-bridge" checked style="width: auto;">
+                <span>讓 AI 補足各短篇之間的銜接情節（產生「銜接章節」大綱）</span>
+            </label>
+
+            <label style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-muted);">
+                📚 勾選要合併的短篇（數字＝合併順序）
+            </label>
+            <div class="novel-list" id="merge-novel-list">
+                <!-- 由JavaScript動態生成 -->
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="mergeNovels()">🔗 開始合併</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -543,6 +664,7 @@
         let novels = [];
         let currentNovel = null;
         let currentChapter = null;
+        let mergeSelection = [];  // 合併頁：依勾選順序記錄小說 id
 
         // API base URL
         const API_BASE = '/api/v1';
@@ -554,28 +676,29 @@
         });
 
         // Section navigation
-        // 注意：只隱藏三個頂層區塊。不能用 '.content-area' 全選，
+        // 注意：只隱藏這四個頂層區塊。不能用 '.content-area' 全選，
         // 因為 #novel-detail 也有這個 class，會被誤藏且再也不顯示
+        // 各區塊對應的導覽鈕索引（順序須與 HTML 中 .nav-btn 一致）
+        const SECTION_NAV = {
+            create:  { index: 0, display: 'block', onShow: null },
+            library: { index: 1, display: 'grid',  onShow: loadNovels },
+            merge:   { index: 2, display: 'block', onShow: loadMergeList },
+            styles:  { index: 3, display: 'block', onShow: loadStylesDetail },
+        };
+
         function showSection(section) {
-            document.querySelectorAll('#section-create, #section-library, #section-styles').forEach(el => {
+            document.querySelectorAll('#section-create, #section-library, #section-merge, #section-styles').forEach(el => {
                 el.style.display = 'none';
             });
             document.querySelectorAll('.nav-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
 
-            if (section === 'create') {
-                document.getElementById('section-create').style.display = 'block';
-                document.querySelectorAll('.nav-btn')[0].classList.add('active');
-            } else if (section === 'library') {
-                document.getElementById('section-library').style.display = 'grid';
-                document.querySelectorAll('.nav-btn')[1].classList.add('active');
-                loadNovels();
-            } else if (section === 'styles') {
-                document.getElementById('section-styles').style.display = 'block';
-                document.querySelectorAll('.nav-btn')[2].classList.add('active');
-                loadStylesDetail();
-            }
+            const cfg = SECTION_NAV[section];
+            if (!cfg) return;
+            document.getElementById('section-' + section).style.display = cfg.display;
+            document.querySelectorAll('.nav-btn')[cfg.index].classList.add('active');
+            if (cfg.onShow) cfg.onShow();
         }
 
         // Load styles
@@ -988,6 +1111,90 @@
                 renderNovelDetail();
             } catch (error) {
                 showToast('刪除失敗');
+            }
+        }
+
+        // ── 合併長篇 ──────────────────────────────────────
+
+        // 進入合併頁時載入小說清單（重置勾選）
+        async function loadMergeList() {
+            mergeSelection = [];
+            await loadNovels();  // 更新全域 novels
+            renderMergeList();
+        }
+
+        function renderMergeList() {
+            const container = document.getElementById('merge-novel-list');
+            if (novels.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">還沒有小說可以合併。</p>';
+                return;
+            }
+            container.innerHTML = novels.map(novel => {
+                const order = mergeSelection.indexOf(novel.id);
+                const selected = order !== -1;
+                return `
+                    <div class="merge-item ${selected ? 'selected' : ''}" onclick="toggleMerge('${novel.id}')">
+                        <div class="order-badge">${selected ? (order + 1) : ''}</div>
+                        <div class="merge-info">
+                            <h4>${novel.title}</h4>
+                            <p>${novel.chapter_count} 章 · ${novel.style}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 切換勾選；用陣列記錄「勾選順序」＝合併順序
+        function toggleMerge(novelId) {
+            const idx = mergeSelection.indexOf(novelId);
+            if (idx === -1) {
+                mergeSelection.push(novelId);
+            } else {
+                mergeSelection.splice(idx, 1);
+            }
+            renderMergeList();
+        }
+
+        async function mergeNovels() {
+            const title = document.getElementById('merge-title').value.trim();
+            const bridge = document.getElementById('merge-bridge').checked;
+
+            if (mergeSelection.length < 2) {
+                showToast('請至少勾選兩部小說');
+                return;
+            }
+            if (!title) {
+                showToast('請為新長篇取一個名字');
+                return;
+            }
+
+            showToast(bridge ? '正在合併並生成銜接情節，請稍候…' : '正在合併…');
+
+            try {
+                const response = await fetch(`${API_BASE}/novels/merge`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        novel_ids: mergeSelection,
+                        new_title: title,
+                        bridge: bridge,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${response.status}`);
+                }
+
+                const novel = await response.json();
+                showToast('合併成功！');
+                document.getElementById('merge-title').value = '';
+                mergeSelection = [];
+                showSection('library');
+                await loadNovels();
+                selectNovel(novel.id);
+            } catch (error) {
+                showToast('合併失敗：' + error.message);
             }
         }
 

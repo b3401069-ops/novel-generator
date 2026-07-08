@@ -174,8 +174,64 @@ class NovelEngine:
                 foreshadowing=chap_data.get("foreshadowing", []),
             )
             novel.chapters.append(chapter)
-        
+
         return novel
+
+    async def generate_bridge(
+        self,
+        prev_title: str,
+        prev_tail: str,
+        next_title: str,
+        next_head: str,
+        style: str = "modern",
+    ) -> Dict[str, Any]:
+        """
+        生成兩部短篇之間的「銜接章節」大綱（合併成長篇時用）
+
+        Args:
+            prev_title: 前一部標題
+            prev_tail: 前一部的結尾內容或摘要
+            next_title: 下一部標題
+            next_head: 下一部的開頭內容或摘要
+            style: 風格
+
+        Returns:
+            {"title": ..., "summary": ..., "key_events": [...]}
+        """
+        style_config = self.style_engine.get_style(style)
+        system_prompt = get_anti_ai_system_prompt(style_config.system_prompt)
+
+        user_prompt = f"""
+你正在把多部短篇小說合併成一部長篇小說。現在需要設計一段「銜接情節」，
+讓前一部的結尾自然過渡到下一部的開頭，補足中間缺少的劇情，使長篇讀起來連貫。
+
+【前一部：{prev_title}】結尾：
+{prev_tail or '（無內容，僅有大綱）'}
+
+【下一部：{next_title}】開頭：
+{next_head or '（無內容，僅有大綱）'}
+
+請設計「一個」銜接章節的大綱，只用 JSON 回覆，格式如下：
+{{"title": "銜接章節的標題", "summary": "這一章的情節摘要，說明角色如何從前一部的結局走到下一部的開端、補足了哪些中間劇情", "key_events": ["關鍵事件1", "關鍵事件2", "關鍵事件3"]}}
+"""
+
+        response = await self.client.chat.completions.create(
+            model=self.settings.llm_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=self.settings.llm_temperature,
+            max_tokens=1200,
+            response_format={"type": "json_object"},
+        )
+
+        data = self._parse_json_response(response.choices[0].message.content)
+        return {
+            "title": data.get("title", "銜接章節"),
+            "summary": data.get("summary", ""),
+            "key_events": data.get("key_events", []),
+        }
 
     async def generate_chapter(
         self,
