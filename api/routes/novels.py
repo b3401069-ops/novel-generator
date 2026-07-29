@@ -54,6 +54,7 @@ class NovelDetailResponse(BaseModel):
     style: str
     characters: List[dict]
     chapters: List[dict]
+    plot_threads: Optional[List[dict]] = None  # P4
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -122,9 +123,14 @@ async def create_novel(
             title=novel.title,
             summary=novel.summary,
             style=novel.style,
+            plot_threads=[
+                {"id": t.id, "name": t.name, "summary": t.summary,
+                 "main_characters": t.main_characters, "progress": t.progress}
+                for t in novel.plot_threads
+            ] if novel.plot_threads else [],
         )
         db.add(novel_db)
-        
+
         # 保存角色
         for char in novel.characters:
             char_db = CharacterDB(
@@ -135,7 +141,7 @@ async def create_novel(
                 traits=char.traits,
             )
             db.add(char_db)
-        
+
         # 保存章節
         for chap in novel.chapters:
             chap_db = ChapterDB(
@@ -145,6 +151,7 @@ async def create_novel(
                 summary=chap.summary,
                 key_events=chap.key_events,
                 foreshadowing=chap.foreshadowing,
+                thread_id=chap.thread_id,
             )
             db.add(chap_db)
         

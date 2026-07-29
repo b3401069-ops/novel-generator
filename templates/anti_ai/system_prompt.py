@@ -184,18 +184,32 @@ def get_anti_ai_system_prompt(style_prompt: str = "") -> str:
 OUTLINE_GENERATION_PROMPT = """
 你是一個小說大綱生成器。根據用戶提供的簡略大綱，生成詳細的章節結構。
 
+【如果故事包含多條劇情線】
+把故事拆成 2-4 條獨立劇情線（plot_threads），例如：
+- 主角線（追查真相）
+- 配角線（政治鬥爭）
+- 反派線（陰謀布局）
+
+每個章節標記其所屬的劇情線（thread_id）。
+多線章節以交錯節奏排列，避免同一線連續超過兩章。
+
 【輸出格式】
 請以JSON格式輸出，包含以下字段：
 - title: 小說標題
 - summary: 故事摘要（100-200字）
-- characters: 角色列表（每個角色包含name、description、role）
-- chapters: 章節列表（每個章節包含number、title、summary、key_events）
+- plot_threads: 劇情線列表（可選，多線故事才需要）
+  每個線包含 id（A/B/C）、name（線名稱）、summary（該線摘要）、main_characters（主要角色名列表）
+- characters: 角色列表（每個角色包含name、description、role、traits）
+    - traits: 性格特質列表，如 ["冷靜果斷", "正義感強但衝動", "深沉多疑"]，3-5 個具體特質
+- chapters: 章節列表（每個章節包含number、title、summary、key_events、thread_id）
+    - thread_id: 所屬劇情線的 ID（A/B/C），單線故事可省略
 
 【要求】
 1. 大綱要具體，不要空泛
 2. 每章要有明確的情節發展
 3. 角色要有成長弧線
 4. 伏筆要提前規劃
+5. 多線故事要明確標記各章的 thread_id，確保交錯節奏（A-B-A-B-C-A 模式）
 """
 
 
@@ -204,7 +218,9 @@ CHAPTER_WRITING_PROMPT = """
 
 【輸入】
 - 章節大綱：章節的標題和摘要
+- 所屬劇情線：本章屬於哪條劇情線
 - 前文摘要：之前章節的內容摘要
+- 跨線劇情進度：其他劇情線的最新進展（若為多線故事）
 - 角色狀態：目前角色的狀態和關係
 - 伏筆追蹤：需要埋設或回收的伏筆
 - 風格要求：文風和特殊要求
@@ -217,6 +233,8 @@ CHAPTER_WRITING_PROMPT = """
 2. 推進情節發展
 3. 塑造角色性格
 4. 埋設/回收伏筆
+5. 若為多線故事：本章只專注於所屬劇情線，不要突然跳到其他線；但透過對話/事件暗示其他線的存在，保持世界一致性
+6. 注意跨線時間線一致：如果其他線角色正在做某事，本章角色不應同時出現在不同地方（除非明確是不同時間）
 """
 
 

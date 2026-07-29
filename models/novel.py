@@ -21,10 +21,15 @@ class NovelDB(Base):
     summary = Column(Text)
     style = Column(String(50), default="modern")
     
+    # P0+P1: 長篇防矛盾
+    running_summary = Column(Text)  # 全書累進摘要
+    unresolved_foreshadowing = Column(JSON, default=list)  # 未回收伏筆清單
+    plot_threads = Column(JSON, default=list)  # P4: 劇情線定義
+
     # 時間戳
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    
+
     # 關聯
     chapters = relationship("ChapterDB", back_populates="novel", cascade="all, delete-orphan")
     characters = relationship("CharacterDB", back_populates="novel", cascade="all, delete-orphan")
@@ -42,6 +47,9 @@ class NovelDB(Base):
             "title": self.title,
             "summary": self.summary,
             "style": self.style,
+            "running_summary": self.running_summary,
+            "unresolved_foreshadowing": self.unresolved_foreshadowing,
+            "plot_threads": self.plot_threads,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "chapter_count": chapter_count,
@@ -63,7 +71,8 @@ class ChapterDB(Base):
     foreshadowing = Column(JSON, default=list)
     version = Column(Integer, default=1)
     versions = Column(JSON, default=list)
-    
+    thread_id = Column(String(10))  # P4: 所屬劇情線 ID（A/B/C）
+
     # 時間戳
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -83,6 +92,7 @@ class ChapterDB(Base):
             "key_events": self.key_events,
             "foreshadowing": self.foreshadowing,
             "version": self.version,
+            "thread_id": self.thread_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

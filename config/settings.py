@@ -18,13 +18,18 @@ def _load_hermes_config():
         hermes_config = Path.home() / ".hermes" / "config.yaml"
         if hermes_config.exists():
             with open(hermes_config) as f:
-                mc = yaml.safe_load(f)["model"]
-            return {
-                "llm_api_base": mc.get("base_url", ""),
-                "llm_api_key": mc.get("api_key", ""),
-                "llm_model": mc.get("default", ""),
-                "llm_max_tokens": mc.get("max_tokens", 8192),
+                mc = yaml.safe_load(f)
+            result = {
+                "llm_api_base": mc["model"].get("base_url", ""),
+                "llm_api_key": mc["model"].get("api_key", ""),
+                "llm_model": mc["model"].get("default", ""),
+                "llm_max_tokens": mc["model"].get("max_tokens", 8192),
             }
+            # 也讀取 Gemini API key（從 auxiliary.vision）
+            aux_vision = mc.get("auxiliary", {}).get("vision", {})
+            if aux_vision.get("api_key"):
+                result["gemini_api_key"] = aux_vision["api_key"]
+            return result
     except Exception:
         pass
     return {}
@@ -51,6 +56,10 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.8
     # 中文 3000 字約 4500+ tokens，4096 會截斷章節，故預設 8192
     llm_max_tokens: int = 8192
+
+    # === Gemini 設定（伏筆萃取用） ===
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.6-flash"
 
     # 詩詞生成用（需要較高創意）
     poetry_temperature: float = 1.0

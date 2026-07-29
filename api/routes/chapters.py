@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from models.database import get_db, async_session
 from models.novel import NovelDB, ChapterDB, CharacterDB
-from core.engine import NovelEngine, Novel, Chapter, Character
+from core.engine import NovelEngine, Novel, Chapter, Character, PlotThread
 from config.settings import get_settings
 
 
@@ -77,12 +77,12 @@ def _save_version(chapter_db: ChapterDB, content: str, instruction: Optional[str
 async def _load_engine_novel(
     db: AsyncSession,
     novel_id: str,
-) -> Tuple[Novel, Dict[int, ChapterDB]]:
+) -> Tuple[Novel, Dict[int, ChapterDB], NovelDB]:
     """
     從資料庫載入小說並轉換為引擎物件。
 
     Returns:
-        (引擎 Novel 物件, {章節編號: ChapterDB})
+        (引擎 Novel 物件, {章節編號: ChapterDB}, NovelDB 物件)
     """
     result = await db.execute(select(NovelDB).where(NovelDB.id == novel_id))
     novel_db = result.scalar_one_or_none()
@@ -101,17 +101,31 @@ async def _load_engine_novel(
     )
     characters = chars_result.scalars().all()
 
+    # 解析 plot_threads（SQLite JSON 欄位可能返回字串或已解析物件）
+    raw_threads = novel_db.plot_threads or []
+    if isinstance(raw_threads, str):
+        import json
+        raw_threads = json.loads(raw_threads)
+    plot_threads = [
+        PlotThread(id=t.get("id", ""), name=t.get("name", ""), summary=t.get("summary", ""))
+        for t in raw_threads
+    ]
+
     novel = Novel(
         id=novel_db.id,
         title=novel_db.title,
         summary=novel_db.summary,
         style=novel_db.style,
+        running_summary=novel_db.running_summary or "",
+        unresolved_foreshadowing=novel_db.unresolved_foreshadowing or [],
+        plot_threads=plot_threads,
         characters=[
             Character(
                 name=char.name,
                 description=char.description,
                 role=char.role,
                 traits=char.traits or [],
+                status=char.status or "alive",
             )
             for char in characters
         ],
@@ -123,16 +137,46 @@ async def _load_engine_novel(
                 content=chap.content,
                 key_events=chap.key_events or [],
                 foreshadowing=chap.foreshadowing or [],
+                thread_id=chap.thread_id,
             )
             for chap in all_chapters
         ],
     )
-    return novel, {chap.number: chap for chap in all_chapters}
+    return novel, {chap.number: chap for chap in all_chapters}, novel_db
 
 
 def _sse(data: dict) -> str:
     """編碼單一 SSE 事件"""
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def _persist_novel_state(
+    novel_db: NovelDB,
+    novel: Novel,
+    db: AsyncSession,
+) -> None:
+    """
+    持久化 P0+P1+P2 更新的小說狀態到資料庫。
+
+    每章生成完成後，引擎會更新 running_summary、unresolved_foreshadowing
+    與角色狀態。此函數將這些記憶體變更寫回資料庫。
+    """
+    novel_db.running_summary = novel.running_summary
+    novel_db.unresolved_foreshadowing = novel.unresolved_foreshadowing
+
+    # 持久化角色狀態更新
+    try:
+        chars_result = await db.execute(
+            select(CharacterDB).where(CharacterDB.novel_id == novel.id)
+        )
+        char_dbs = {c.name: c for c in chars_result.scalars().all()}
+        for char in novel.characters:
+            db_char = char_dbs.get(char.name)
+            if db_char:
+                db_char.description = char.description
+                db_char.status = char.status
+    except Exception:
+        pass  # 角色同步失敗不阻塞章節存檔
 
 
 SSE_HEADERS = {
@@ -151,6 +195,7 @@ class ChapterResponse(BaseModel):
     content: Optional[str] = None
     key_events: List[str] = []
     foreshadowing: List[str] = []
+    thread_id: Optional[str] = None  # P4
     version: int = 1
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -206,23 +251,28 @@ async def generate_chapter(
 
     根據章節大綱生成完整內容
     """
-    novel, chapters_by_number = await _load_engine_novel(db, request.novel_id)
+    novel, chapters_by_number, novel_db = await _load_engine_novel(db, request.novel_id)
     chapter_db = chapters_by_number.get(request.chapter_number)
 
     if not chapter_db:
         raise HTTPException(status_code=404, detail="章節不存在")
 
     try:
-        # 生成章節
+        # 持久化包裝函式（閉包捕捉 novel_db, db）
+        async def persist(novel: Novel, chapter_number: int) -> None:
+            await _persist_novel_state(novel_db, novel, db)
+
+        # 生成章節（含 P0+P1+P2 狀態更新 + 自動持久化回調）
         content = await engine.generate_chapter(
             novel=novel,
             chapter_number=request.chapter_number,
             previous_summary=request.previous_summary,
+            on_complete=persist,
         )
         
-        # 更新資料庫
+        # 更新資料庫（章節內容版本）
         _save_version(chapter_db, content)
-
+        
         await db.commit()
         
         return chapter_db.to_dict()
@@ -242,7 +292,7 @@ async def edit_chapter(
 
     根據修改要求更新章節內容
     """
-    novel, chapters_by_number = await _load_engine_novel(db, request.novel_id)
+    novel, chapters_by_number, _ = await _load_engine_novel(db, request.novel_id)
     chapter_db = chapters_by_number.get(request.chapter_number)
 
     if not chapter_db:
@@ -284,19 +334,23 @@ async def generate_chapter_stream(request: ChapterGenerateRequest):
     """
     async def event_stream():
         # 串流回應期間需要自行管理 session，不能用 Depends(get_db)
-        # （yield 依賴的關閉時機與串流生命週期不保證相容）
         try:
             async with async_session() as db:
-                novel, chapters_by_number = await _load_engine_novel(db, request.novel_id)
+                novel, chapters_by_number, novel_db = await _load_engine_novel(db, request.novel_id)
                 chapter_db = chapters_by_number.get(request.chapter_number)
                 if not chapter_db:
                     yield _sse({"type": "error", "detail": "章節不存在"})
                     return
 
+                # 持久化包裝函式
+                async def persist(novel, ch_num):
+                    await _persist_novel_state(novel_db, novel, db)
+
                 async for event in engine.generate_chapter_stream(
                     novel=novel,
                     chapter_number=request.chapter_number,
                     previous_summary=request.previous_summary,
+                    on_complete=persist,
                 ):
                     if event["type"] == "done":
                         _save_version(chapter_db, event["content"])
@@ -304,6 +358,9 @@ async def generate_chapter_stream(request: ChapterGenerateRequest):
                         yield _sse({"type": "done", "chapter": chapter_db.to_dict()})
                     else:
                         yield _sse(event)
+
+                # P0+P1+P2 已由 engine 內部 + on_complete 回調完成持久化
+                await db.commit()
         except HTTPException as e:
             yield _sse({"type": "error", "detail": e.detail})
         except Exception as e:
@@ -326,7 +383,7 @@ async def edit_chapter_stream(request: ChapterEditRequest):
     async def event_stream():
         try:
             async with async_session() as db:
-                novel, chapters_by_number = await _load_engine_novel(db, request.novel_id)
+                novel, chapters_by_number, _ = await _load_engine_novel(db, request.novel_id)
                 chapter_db = chapters_by_number.get(request.chapter_number)
                 if not chapter_db:
                     yield _sse({"type": "error", "detail": "章節不存在"})
@@ -398,7 +455,39 @@ async def rollback_chapter(
     # 回滾
     chapter_db.content = target_version["content"]
     chapter_db.version = request.version
-    
+
     await db.commit()
-    
+
     return chapter_db.to_dict()
+
+
+# ──────────────────────────────────────────────
+# P3 — 全書最終審閱
+# ──────────────────────────────────────────────
+
+
+class ReviewRequest(BaseModel):
+    """審閱請求"""
+    novel_id: str
+
+
+@router.post("/review")
+async def review_novel(
+    request: ReviewRequest,
+):
+    """
+    P3 — 全書最終審閱
+
+    載入已完成的小說，執行全面審閱：
+    - 角色狀態一致性
+    - 伏筆回收
+    - 時間線
+    - 設定一致性
+
+    返回審閱報告 JSON。
+    """
+    async with async_session() as db:
+        novel, _, _ = await _load_engine_novel(db, request.novel_id)
+
+    result = await engine.final_review(novel)
+    return result
